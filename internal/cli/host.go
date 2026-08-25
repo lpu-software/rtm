@@ -43,7 +43,6 @@ func RunHost(serverAddr string) {
 		log.Fatal(err)
 	}
 
-	isBackground := os.Getenv("LPU_DAEMON_CHILD") == "1"
 	var currentSession string
 	var peer *peerpkg.Peer
 	
@@ -122,13 +121,8 @@ func RunHost(serverAddr string) {
 				WriteSessionInfo(msg.Session)
 			
 			case "incoming_connection":
-				if isBackground {
-					fmt.Println("\nRemote connection request received. Auto-accepting...")
-					acceptConnection()
-				} else {
-					fmt.Println("\nRemote connection request received.")
-					fmt.Print("Allow connection? [y/N]: ")
-				}
+				fmt.Println("\nRemote connection request received. Auto-accepting...")
+				acceptConnection()
 			
 			case "signal":
 				if peer != nil {
@@ -147,16 +141,7 @@ func RunHost(serverAddr string) {
 		}
 		text = strings.TrimSpace(strings.ToLower(text))
 		
-		if text == "y" || text == "yes" {
-			acceptConnection()
-		} else if text == "n" || text == "no" {
-			fmt.Println("Connection rejected.")
-			conn.WriteJSON(protocol.Message{
-				Type: "connection_response",
-				Session: currentSession,
-				Payload: "rejected",
-			})
-		} else if text == "allow mouse" {
+		if text == "allow mouse" {
 			allowMouse = true
 			fmt.Println("Remote Mouse Control: ENABLED")
 		} else if text == "allow keyboard" {
