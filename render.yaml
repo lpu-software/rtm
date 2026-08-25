@@ -2,8 +2,8 @@ services:
   - type: web
     name: lpushare
     env: go
-    buildCommand: go build -o bin/rtm ./cmd/rtm
-    startCommand: ./bin/rtm serve
+    buildCommand: go build -o bin/serve ./cmd/serve
+    startCommand: ./bin/serve
     envVars:
       - key: PORT
         value: 10000
