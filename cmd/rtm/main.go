@@ -22,7 +22,20 @@ func main() {
 	case "lele":
 		hostCmd := flag.NewFlagSet("lele", flag.ExitOnError)
 		serverAddr := hostCmd.String("server", "ws://localhost:8080/ws", "Signaling server address")
+		background := hostCmd.Bool("d", false, "Run in background (daemon mode)")
+		backgroundLong := hostCmd.Bool("background", false, "Run in background (daemon mode)")
 		hostCmd.Parse(os.Args[2:])
+
+		if *background || *backgroundLong {
+			isChild, err := cli.Daemonize()
+			if err != nil {
+				log.Fatal("Failed to start background daemon: ", err)
+			}
+			if !isChild {
+				return
+			}
+		}
+
 		cli.RunHost(*serverAddr)
 
 	case "dede":
@@ -43,7 +56,7 @@ func main() {
 		fmt.Println("Verifying cryptographic signature of latest release...")
 		// In a production environment, this would hit the GitHub Releases API, 
 		// download the binary, verify the sha256/GPG signature, and replace the executable.
-		fmt.Println("LPU is up to date (v1.0.0).")
+		fmt.Println("LPU is up to date (v1.0.5).")
 
 	case "serve":
 		serveCmd := flag.NewFlagSet("serve", flag.ExitOnError)
@@ -60,6 +73,12 @@ func main() {
 			log.Fatal(err)
 		}
 
+	case "stop":
+		cli.StopHost()
+
+	case "status":
+		cli.StatusHost()
+
 	default:
 		printUsage()
 		os.Exit(1)
@@ -67,10 +86,12 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println("lpu - Terminal-based Remote Access (v1.0.2)")
+	fmt.Println("lpu - Terminal-based Remote Access (v1.0.5)")
 	fmt.Println("\nUsage:")
-	fmt.Println("  lpu lele                    Start a new host session")
+	fmt.Println("  lpu lele [-d]               Start a host session (-d for background)")
 	fmt.Println("  lpu dede <session_code>     Connect to an existing host")
 	fmt.Println("  lpu serve                   Start the signaling server and web viewer")
+	fmt.Println("  lpu status                  Check active background session status")
+	fmt.Println("  lpu stop                    Stop the active background session")
 	fmt.Println("  lpu kya                     Check for and install updates")
 }

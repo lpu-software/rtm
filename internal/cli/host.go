@@ -43,11 +43,67 @@ func RunHost(serverAddr string) {
 		log.Fatal(err)
 	}
 
+	isBackground := os.Getenv("LPU_DAEMON_CHILD") == "1"
 	var currentSession string
 	var peer *peerpkg.Peer
 	
 	allowMouse := true
 	allowKeyboard := true
+
+	acceptConnection := func() {
+		fmt.Println("\nSession: ACTIVE")
+		fmt.Println("Screen Sharing: ON")
+		fmt.Printf("Remote Control: Mouse=%v, Keyboard=%v\n", allowMouse, allowKeyboard)
+		
+		var err error
+		peer, err = peerpkg.NewPeer(true, func(signal string) {
+			conn.WriteJSON(protocol.Message{
+				Type: "signal",
+				Session: currentSession,
+				Signal: signal,
+			})
+		}, func(msg string) {
+			var ev InputEvent
+			if err := json.Unmarshal([]byte(msg), &ev); err == nil {
+				if ev.Type == "mouse_click" && allowMouse {
+					sw, sh := robotgo.GetScreenSize()
+					robotgo.Move(int(ev.X * float64(sw)), int(ev.Y * float64(sh)))
+					robotgo.Click("left")
+				} else if ev.Type == "mouse_move" && allowMouse {
+					sw, sh := robotgo.GetScreenSize()
+					robotgo.Move(int(ev.X * float64(sw)), int(ev.Y * float64(sh)))
+				} else if ev.Type == "key_press" && allowKeyboard {
+					robotgo.KeyTap(ev.Key)
+				}
+			}
+		}, nil)
+
+		if err != nil {
+			log.Println("WebRTC init error:", err)
+		} else {
+			peer.OnDataChannel = func(d *webrtc.DataChannel) {
+				go func() {
+					for {
+						time.Sleep(33 * time.Millisecond)
+						bounds := screenshot.GetDisplayBounds(0)
+						img, err := screenshot.CaptureRect(bounds)
+						if err != nil {
+							continue
+						}
+						var buf bytes.Buffer
+						jpeg.Encode(&buf, img, &jpeg.Options{Quality: 30})
+						d.Send(buf.Bytes())
+					}
+				}()
+			}
+		}
+
+		conn.WriteJSON(protocol.Message{
+			Type: "connection_response",
+			Session: currentSession,
+			Payload: "accepted",
+		})
+	}
 
 	go func() {
 		for {
@@ -55,6 +111,7 @@ func RunHost(serverAddr string) {
 			err := conn.ReadJSON(&msg)
 			if err != nil {
 				log.Println("\nDisconnected from server.")
+				CleanSessionInfo()
 				os.Exit(0)
 			}
 
@@ -62,10 +119,16 @@ func RunHost(serverAddr string) {
 			case "host_registered":
 				currentSession = msg.Session
 				fmt.Printf("\nRemote session created\nSession Code: %s\nWaiting for connection...\n\n", msg.Session)
+				WriteSessionInfo(msg.Session)
 			
 			case "incoming_connection":
-				fmt.Println("\nRemote connection request received.")
-				fmt.Print("Allow connection? [y/N]: ")
+				if isBackground {
+					fmt.Println("\nRemote connection request received. Auto-accepting...")
+					acceptConnection()
+				} else {
+					fmt.Println("\nRemote connection request received.")
+					fmt.Print("Allow connection? [y/N]: ")
+				}
 			
 			case "signal":
 				if peer != nil {
@@ -77,67 +140,15 @@ func RunHost(serverAddr string) {
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		text, _ := reader.ReadString('\n')
+		text, err := reader.ReadString('\n')
+		if err != nil {
+			// If stdin is closed/detached (background mode), block this goroutine indefinitely
+			select {}
+		}
 		text = strings.TrimSpace(strings.ToLower(text))
 		
 		if text == "y" || text == "yes" {
-			fmt.Println("\nSession: ACTIVE")
-			fmt.Println("Screen Sharing: ON")
-			fmt.Println("Remote Control: OFF")
-			fmt.Println("Commands available:")
-			fmt.Println("  'allow mouse'    - Enable remote mouse control")
-			fmt.Println("  'allow keyboard' - Enable remote keyboard control")
-			fmt.Println("  'stop'           - Disconnect immediately")
-			
-			var err error
-			peer, err = peerpkg.NewPeer(true, func(signal string) {
-				conn.WriteJSON(protocol.Message{
-					Type: "signal",
-					Session: currentSession,
-					Signal: signal,
-				})
-			}, func(msg string) {
-				var ev InputEvent
-				if err := json.Unmarshal([]byte(msg), &ev); err == nil {
-					if ev.Type == "mouse_click" && allowMouse {
-						sw, sh := robotgo.GetScreenSize()
-						robotgo.Move(int(ev.X * float64(sw)), int(ev.Y * float64(sh)))
-						robotgo.Click("left")
-					} else if ev.Type == "mouse_move" && allowMouse {
-						sw, sh := robotgo.GetScreenSize()
-						robotgo.Move(int(ev.X * float64(sw)), int(ev.Y * float64(sh)))
-					} else if ev.Type == "key_press" && allowKeyboard {
-						robotgo.KeyTap(ev.Key)
-					}
-				}
-			}, nil)
-
-			if err != nil {
-				log.Println("WebRTC init error:", err)
-			} else {
-				peer.OnDataChannel = func(d *webrtc.DataChannel) {
-					go func() {
-						for {
-							time.Sleep(33 * time.Millisecond)
-							bounds := screenshot.GetDisplayBounds(0)
-							img, err := screenshot.CaptureRect(bounds)
-							if err != nil {
-								continue
-							}
-							var buf bytes.Buffer
-							jpeg.Encode(&buf, img, &jpeg.Options{Quality: 30})
-							d.Send(buf.Bytes())
-						}
-					}()
-				}
-			}
-
-			conn.WriteJSON(protocol.Message{
-				Type: "connection_response",
-				Session: currentSession,
-				Payload: "accepted",
-			})
-
+			acceptConnection()
 		} else if text == "n" || text == "no" {
 			fmt.Println("Connection rejected.")
 			conn.WriteJSON(protocol.Message{
@@ -153,6 +164,7 @@ func RunHost(serverAddr string) {
 			fmt.Println("Remote Keyboard Control: ENABLED")
 		} else if text == "stop" {
 			fmt.Println("Terminating session...")
+			CleanSessionInfo()
 			os.Exit(0)
 		}
 	}

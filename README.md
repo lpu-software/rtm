@@ -56,6 +56,18 @@ lpu lele -server wss://my-lpu.loca.lt/ws
 ```
 *The terminal will display a temporary session code (e.g. `a1b2c3d4`) and wait.*
 
+#### Optional: Running in the Background (Daemon Mode)
+If you want the host session to keep running even if you close the terminal window, run it with the `-d` (daemon) flag:
+```bash
+lpu lele -d -server wss://my-lpu.loca.lt/ws
+```
+
+In background mode:
+- The session is started invisibly, and connections are **automatically accepted**.
+- To check the active session code, run: **`lpu status`**
+- To terminate the background session, run: **`lpu stop`**
+- Logs are written transparently to `~/.lpu/lpu.log`.
+
 ### Step 3: The Receiver Connects (Zero Installation!)
 The person who wants to view and control the screen (the Receiver) **does not need to install anything!**
 
