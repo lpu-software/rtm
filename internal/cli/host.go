@@ -32,9 +32,17 @@ type InputEvent struct {
 func RunHost(serverAddr string) {
 	fmt.Println("Starting Host Session...")
 	
-	conn, _, err := websocket.DefaultDialer.Dial(serverAddr, nil)
+	var conn *websocket.Conn
+	var err error
+	for i := 0; i < 10; i++ {
+		conn, _, err = websocket.DefaultDialer.Dial(serverAddr, nil)
+		if err == nil {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
 	if err != nil {
-		log.Fatal("Could not connect to signaling server:", err)
+		log.Fatal("Could not connect to signaling server after retries:", err)
 	}
 	defer conn.Close()
 
