@@ -54,15 +54,15 @@ func StartAll() {
 	// Wait briefly for the server to bind to port 8080
 	time.Sleep(1 * time.Second)
 
-	// 3. Start localtunnel
-	fmt.Print("  ✓ Exposing server via public tunnel (npx localtunnel)... ")
-	tunnelCmd := exec.Command("npx", "localtunnel", "--port", "8080")
-	stdout, err := tunnelCmd.StdoutPipe()
+	// 3. Start cloudflared tunnel
+	fmt.Print("  ✓ Exposing server via public tunnel (npx cloudflared)... ")
+	tunnelCmd := exec.Command("npx", "cloudflared", "tunnel", "--url", "http://localhost:8080")
+	stdout, err := tunnelCmd.StderrPipe() // cloudflared prints logs to stderr
 	if err != nil {
-		fmt.Printf("failed to pipe localtunnel: %v\n", err)
+		fmt.Printf("failed to pipe tunnel: %v\n", err)
 		return
 	}
-	tunnelCmd.Stderr = tunnelLog // Send stderr to log
+	tunnelCmd.Stdout = tunnelLog // Send stdout to log
 	
 	if err := tunnelCmd.Start(); err != nil {
 		fmt.Printf("failed (is Node/npx installed?): %v\n", err)
@@ -70,15 +70,22 @@ func StartAll() {
 	}
 	_ = os.WriteFile(filepath.Join(lpuDir, "tunnel.pid"), []byte(fmt.Sprintf("%d", tunnelCmd.Process.Pid)), 0644)
 
-	// Read localtunnel URL from stdout
+	// Read cloudflared URL from stderr
 	var publicURL string
 	scanner := bufio.NewScanner(stdout)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.Contains(line, "your url is:") {
-			parts := strings.Split(line, "your url is:")
-			if len(parts) > 1 {
-				publicURL = strings.TrimSpace(parts[1])
+		_, _ = tunnelLog.Write([]byte(line + "\n")) // Write logs to tunnel.log
+		
+		if strings.Contains(line, "trycloudflare.com") {
+			words := strings.Fields(line)
+			for _, word := range words {
+				if strings.HasPrefix(word, "https://") && strings.Contains(word, "trycloudflare.com") {
+					publicURL = strings.TrimSpace(word)
+					break
+				}
+			}
+			if publicURL != "" {
 				break
 			}
 		}

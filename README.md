@@ -31,7 +31,7 @@ iwr https://tinyurl.com/lpu-windows | iex
 
 ## How to Use
 
-LPU is packed with a built-in orchestrator that runs the signaling server, localtunnel, and screen sharing together in a **single command**.
+LPU is packed with a built-in orchestrator that runs the signaling server, cloudflared, and screen sharing together in a **single command**.
 
 ### The Easy Way (One-Command Setup)
 
@@ -73,14 +73,14 @@ lpu serve
 ```
 Expose it to the internet (in a new terminal):
 ```bash
-npx localtunnel --port 8080
+npx cloudflared tunnel --url http://localhost:8080
 ```
-*Gives you a URL like: `https://my-lpu.loca.lt`*
+*Gives you a URL like: `https://my-lpu.trycloudflare.com`*
 
 #### Step 2: The Host Shares Their Screen
 Point to your tunneling URL:
 ```bash
-lpu lele -server wss://my-lpu.loca.lt/ws
+lpu lele -server wss://my-lpu.trycloudflare.com/ws
 ```
 
 #### Step 3: Enable Remote Control (Host-Side)
