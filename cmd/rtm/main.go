@@ -56,7 +56,7 @@ func main() {
 		fmt.Println("Verifying cryptographic signature of latest release...")
 		// In a production environment, this would hit the GitHub Releases API, 
 		// download the binary, verify the sha256/GPG signature, and replace the executable.
-		fmt.Println("LPU is up to date (v1.0.5).")
+		fmt.Println("LPU is up to date (v1.0.6).")
 
 	case "serve":
 		serveCmd := flag.NewFlagSet("serve", flag.ExitOnError)
@@ -79,6 +79,9 @@ func main() {
 	case "status":
 		cli.StatusHost()
 
+	case "start":
+		cli.StartAll()
+
 	default:
 		printUsage()
 		os.Exit(1)
@@ -86,8 +89,9 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println("lpu - Terminal-based Remote Access (v1.0.5)")
+	fmt.Println("lpu - Terminal-based Remote Access (v1.0.6)")
 	fmt.Println("\nUsage:")
+	fmt.Println("  lpu start                   One-click background server, tunnel, and host")
 	fmt.Println("  lpu lele [-d]               Start a host session (-d for background)")
 	fmt.Println("  lpu dede <session_code>     Connect to an existing host")
 	fmt.Println("  lpu serve                   Start the signaling server and web viewer")

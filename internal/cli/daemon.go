@@ -32,7 +32,19 @@ func CleanSessionInfo() {
 	if err == nil {
 		_ = os.Remove(filepath.Join(lpuDir, "session.txt"))
 		_ = os.Remove(filepath.Join(lpuDir, "session.pid"))
+		_ = os.Remove(filepath.Join(lpuDir, "server.pid"))
+		_ = os.Remove(filepath.Join(lpuDir, "tunnel.pid"))
+		_ = os.Remove(filepath.Join(lpuDir, "tunnel.txt"))
 	}
+}
+
+func getPID(lpuDir, filename string) (int, error) {
+	pidBytes, err := os.ReadFile(filepath.Join(lpuDir, filename))
+	if err != nil {
+		return 0, err
+	}
+	pidStr := strings.TrimSpace(string(pidBytes))
+	return strconv.Atoi(pidStr)
 }
 
 func StatusHost() {
@@ -42,37 +54,65 @@ func StatusHost() {
 		return
 	}
 
-	pidBytes, err := os.ReadFile(filepath.Join(lpuDir, "session.pid"))
-	if err != nil {
-		fmt.Println("No active LPU background session found.")
-		return
-	}
+	hostPID, errHost := getPID(lpuDir, "session.pid")
+	hostActive := errHost == nil && checkProcessAlive(hostPID)
 
-	pidStr := strings.TrimSpace(string(pidBytes))
-	pid, err := strconv.Atoi(pidStr)
-	if err != nil {
-		fmt.Println("Error reading session PID.")
-		return
-	}
+	serverPID, errServer := getPID(lpuDir, "server.pid")
+	serverActive := errServer == nil && checkProcessAlive(serverPID)
 
-	// Check if process is running using platform-specific check
-	if !checkProcessAlive(pid) {
+	tunnelPID, errTunnel := getPID(lpuDir, "tunnel.pid")
+	tunnelActive := errTunnel == nil && checkProcessAlive(tunnelPID)
+
+	if !hostActive && !serverActive && !tunnelActive {
 		fmt.Println("No active LPU background session found.")
 		CleanSessionInfo()
 		return
 	}
 
-	sessionBytes, _ := os.ReadFile(filepath.Join(lpuDir, "session.txt"))
-	sessionCode := strings.TrimSpace(string(sessionBytes))
-	if sessionCode == "" {
-		sessionCode = "Unknown"
+	fmt.Println("LPU Background Services Status:")
+	
+	if hostActive {
+		sessionBytes, _ := os.ReadFile(filepath.Join(lpuDir, "session.txt"))
+		sessionCode := strings.TrimSpace(string(sessionBytes))
+		if sessionCode == "" {
+			sessionCode = "Generating..."
+		}
+		fmt.Printf("  ● Host Session:  Running (PID: %d, Code: %s)\n", hostPID, sessionCode)
+	} else {
+		fmt.Println("  ○ Host Session:  Stopped")
 	}
 
-	fmt.Println("LPU Host is running in the background.")
-	fmt.Printf("  PID:          %d\n", pid)
-	fmt.Printf("  Session Code: %s\n", sessionCode)
-	fmt.Printf("  Log File:     %s/lpu.log\n", lpuDir)
-	fmt.Println("\nTo stop this session, run: lpu stop")
+	if serverActive {
+		fmt.Printf("  ● Local Server:  Running (PID: %d)\n", serverPID)
+	} else {
+		fmt.Println("  ○ Local Server:  Stopped")
+	}
+
+	if tunnelActive {
+		tunnelURLBytes, _ := os.ReadFile(filepath.Join(lpuDir, "tunnel.txt"))
+		tunnelURL := strings.TrimSpace(string(tunnelURLBytes))
+		if tunnelURL == "" {
+			tunnelURL = "Exposing..."
+		}
+		fmt.Printf("  ● Public Tunnel: Running (PID: %d, URL: %s)\n", tunnelPID, tunnelURL)
+	} else {
+		fmt.Println("  ○ Public Tunnel: Stopped")
+	}
+
+	fmt.Printf("\nLogs directory: %s\n", lpuDir)
+	fmt.Println("To stop all background services, run: lpu stop")
+}
+
+func killProcess(lpuDir, filename string) {
+	pid, err := getPID(lpuDir, filename)
+	if err != nil {
+		return
+	}
+	process, err := os.FindProcess(pid)
+	if err == nil {
+		_ = process.Kill()
+	}
+	_ = os.Remove(filepath.Join(lpuDir, filename))
 }
 
 func StopHost() {
@@ -82,33 +122,12 @@ func StopHost() {
 		return
 	}
 
-	pidBytes, err := os.ReadFile(filepath.Join(lpuDir, "session.pid"))
-	if err != nil {
-		fmt.Println("No active LPU background session to stop.")
-		return
-	}
-
-	pidStr := strings.TrimSpace(string(pidBytes))
-	pid, err := strconv.Atoi(pidStr)
-	if err != nil {
-		fmt.Println("Error reading session PID.")
-		return
-	}
-
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		fmt.Println("No active LPU background session found.")
-		CleanSessionInfo()
-		return
-	}
-
-	fmt.Printf("Stopping LPU background session (PID: %d)... ", pid)
-	err = process.Kill()
-	if err != nil {
-		// If process is already dead
-		fmt.Println("already stopped.")
-	} else {
-		fmt.Println("stopped.")
-	}
+	fmt.Println("Stopping LPU background services...")
+	
+	killProcess(lpuDir, "session.pid")
+	killProcess(lpuDir, "server.pid")
+	killProcess(lpuDir, "tunnel.pid")
+	
 	CleanSessionInfo()
+	fmt.Println("All services stopped.")
 }
