@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RTM Web Viewer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="login-container">
+        <div class="card">
+            <h2>RTM Remote Access</h2>
+            <p>Enter the session code provided by the host.</p>
+            <div class="input-group">
+                <input type="text" id="session-code" placeholder="e.g. 78c6e31a" autocomplete="off" spellcheck="false" />
+                <button id="connect-btn">Connect</button>
+            </div>
+            <p id="status-message"></p>
+        </div>
+    </div>
+
+    <div id="viewer-container" style="display: none;">
+        <img id="screen" draggable="false" />
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
