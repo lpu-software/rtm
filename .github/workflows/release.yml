@@ -35,6 +35,8 @@ jobs:
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
         with:
-          files: lpu.exe
+          files: |
+            lpu.exe
+            release/lpu-mac.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
