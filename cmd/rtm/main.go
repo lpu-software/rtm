@@ -67,7 +67,7 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println("lpu - Terminal-based Remote Access (v1.0.1)")
+	fmt.Println("lpu - Terminal-based Remote Access (v1.0.2)")
 	fmt.Println("\nUsage:")
 	fmt.Println("  lpu lele                    Start a new host session")
 	fmt.Println("  lpu dede <session_code>     Connect to an existing host")
