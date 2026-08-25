@@ -31,60 +31,59 @@ iwr https://tinyurl.com/lpu-windows | iex
 
 ## How to Use
 
-LPU is packed with a built-in orchestrator that runs the signaling server, cloudflared, and screen sharing together in a **single command**.
+LPU connects to a hosted signaling server on Render (`https://lpushare.onrender.com`). This means no local tunnels (Cloudflare/Localtunnel) or local server ports are required on your machine!
 
-### The Easy Way (One-Command Setup)
+### Start Sharing
 
 1. Open your terminal and run:
 ```bash
 lpu start
 ```
 
-This will run everything in the background, automatically create a public tunnel, and print the receiver link and code:
+This will start the screen sharing daemon in the background and instantly output the sharing details:
 ```
+Starting LPU background service...
+  ✓ Host Session started (PID: 91366)
+  ✓ Registering session code... done.
+
 ==============================================
  LPU Public Session Started Successfully!
 ==============================================
- Receiver Link:  https://stale-laws-enter.loca.lt
+ Receiver Link:  https://lpushare.onrender.com
  Session Code:   1f02dc1c
 ==============================================
 You can now safely close this terminal window.
 ```
 
 2. **The Receiver Connects (Zero Installation):** 
-   - The Receiver opens the printed link (e.g. `https://stale-laws-enter.loca.lt`) in their web browser.
+   - The Receiver opens the printed link (`https://lpushare.onrender.com`) in any web browser.
    - They enter the Session Code (`1f02dc1c`) and instantly see your screen.
-   - Connections in this mode are **automatically accepted**.
+   - Connections are **automatically accepted** by default.
 
 3. **Manage the Session:**
    - Check status at any time: `lpu status`
-   - Terminate the sharing and stop the server/tunnel completely: `lpu stop`
+   - Terminate screen sharing: `lpu stop`
    - View background logs: `~/.lpu/lpu.log`
 
 ---
 
-### Advanced / Manual Setup (Three-Terminal Mode)
+### Advanced / Manual Setup
 
-If you want to run the server on a custom port, manually verify connections, or manage your own tunnel:
+If you want to run the server on a custom port or use a custom signaling server:
 
-#### Step 1: Start the Signaling Server
+#### Step 1: Start your own Signaling Server
 ```bash
-lpu serve
+lpu serve -port 8080
 ```
-Expose it to the internet (in a new terminal):
-```bash
-npx cloudflared tunnel --url http://localhost:8080
-```
-*Gives you a URL like: `https://my-lpu.trycloudflare.com`*
 
 #### Step 2: The Host Shares Their Screen
-Point to your tunneling URL:
+Point to your custom signaling WebSocket URL:
 ```bash
-lpu lele -server wss://my-lpu.trycloudflare.com/ws
+lpu lele -server wss://my-custom-server.com/ws
 ```
 
 #### Step 3: Enable Remote Control (Host-Side)
-In the interactive terminal session, the Host must explicitly type:
+In the interactive terminal session, the Host can explicitly type:
 - `allow mouse`
 - `allow keyboard`
 - `stop` (to disconnect immediately)

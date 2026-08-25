@@ -12,6 +12,8 @@ import (
 	"github.com/yatishydv/rtm/web"
 )
 
+const DefaultServerURL = "wss://lpushare.onrender.com/ws"
+
 func main() {
 	if len(os.Args) < 2 {
 		printUsage()
@@ -21,7 +23,7 @@ func main() {
 	switch os.Args[1] {
 	case "lele":
 		hostCmd := flag.NewFlagSet("lele", flag.ExitOnError)
-		serverAddr := hostCmd.String("server", "ws://localhost:8080/ws", "Signaling server address")
+		serverAddr := hostCmd.String("server", DefaultServerURL, "Signaling server address")
 		background := hostCmd.Bool("d", false, "Run in background (daemon mode)")
 		backgroundLong := hostCmd.Bool("background", false, "Run in background (daemon mode)")
 		hostCmd.Parse(os.Args[2:])
@@ -40,7 +42,7 @@ func main() {
 
 	case "dede":
 		connectCmd := flag.NewFlagSet("dede", flag.ExitOnError)
-		serverAddr := connectCmd.String("server", "ws://localhost:8080/ws", "Signaling server address")
+		serverAddr := connectCmd.String("server", DefaultServerURL, "Signaling server address")
 		connectCmd.Parse(os.Args[2:])
 		
 		if connectCmd.NArg() < 1 {
@@ -56,7 +58,7 @@ func main() {
 		fmt.Println("Verifying cryptographic signature of latest release...")
 		// In a production environment, this would hit the GitHub Releases API, 
 		// download the binary, verify the sha256/GPG signature, and replace the executable.
-		fmt.Println("LPU is up to date (v1.0.10).")
+		fmt.Println("LPU is up to date (v1.0.11).")
 
 	case "serve":
 		serveCmd := flag.NewFlagSet("serve", flag.ExitOnError)
@@ -67,7 +69,11 @@ func main() {
 		http.HandleFunc("/ws", server.HandleWS)
 		http.Handle("/", http.FileServer(http.FS(web.StaticFS)))
 
-		addr := ":" + *port
+		p := *port
+		if envPort := os.Getenv("PORT"); envPort != "" {
+			p = envPort
+		}
+		addr := ":" + p
 		log.Printf("Signaling server (with embedded web viewer) listening on %s", addr)
 		if err := http.ListenAndServe(addr, nil); err != nil {
 			log.Fatal(err)
@@ -89,7 +95,7 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println("lpu - Terminal-based Remote Access (v1.0.10)")
+	fmt.Println("lpu - Terminal-based Remote Access (v1.0.11)")
 	fmt.Println("\nUsage:")
 	fmt.Println("  lpu start                   One-click background server, tunnel, and host")
 	fmt.Println("  lpu lele [-d]               Start a host session (-d for background)")
