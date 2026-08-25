@@ -1,6 +1,6 @@
 # LPU - Remote Terminal Management
 
-LPU is a command-first, zero-manual-installation remote support platform built in Go. It enables an authorized Host computer to securely share its screen and grant remote control capabilities to another computer over the internet directly from the terminal.
+LPU is a command-first, zero-manual-installation remote support platform built in Go. It enables an authorized Host computer to securely share its screen and grant remote control capabilities to another person (the Receiver) over the internet—all directly from the terminal.
 
 ## Architecture
 
@@ -10,6 +10,67 @@ LPU is a command-first, zero-manual-installation remote support platform built i
 * **Screen Sharing:** MJPEG streaming natively captured via `kbinani/screenshot`.
 * **Remote Control:** Cross-platform native input injection via `go-vgo/robotgo`.
 
+## Installation
+
+LPU is designed to be instantly available on any machine.
+
+### Mac
+Install via Homebrew:
+```bash
+brew tap lpu-software/lpu
+brew install lpu
+```
+
+### Windows
+Install via PowerShell (downloads and installs instantly):
+```powershell
+iwr https://tinyurl.com/lpu-windows | iex
+```
+
+---
+
+## How to Use (Global Internet Setup)
+
+Because LPU is a peer-to-peer WebRTC application, it requires a "Signaling Server" to introduce the Host and the Receiver. We packed this server (and the Receiver's web viewer) directly into the binary!
+
+Here is how to set it up for free so anyone in the world can connect to you.
+
+### Step 1: Start the Signaling Server (Free)
+You (or anyone) need to run the signaling server and expose it to the internet. 
+
+1. Start the built-in server on your computer:
+```bash
+lpu serve
+```
+2. Open a **new terminal window** and use a free tunneling service (like LocalTunnel) to expose port 8080 to the internet:
+```bash
+npx localtunnel --port 8080
+```
+*It will give you a public URL like: `https://my-lpu.loca.lt`*
+
+### Step 2: The Host Shares Their Screen
+The person who wants to share their screen (the Host) runs this command, pointing to the secure `wss://` WebSocket version of your tunneling URL:
+
+```bash
+lpu lele -server wss://my-lpu.loca.lt/ws
+```
+*The terminal will display a temporary session code (e.g. `a1b2c3d4`) and wait.*
+
+### Step 3: The Receiver Connects (Zero Installation!)
+The person who wants to view and control the screen (the Receiver) **does not need to install anything!**
+
+1. The Receiver simply opens your LocalTunnel URL in any modern web browser (e.g. `https://my-lpu.loca.lt`).
+2. They enter the session code (`a1b2c3d4`) on the webpage.
+3. The Host types `y` in their terminal to accept the connection.
+
+### Step 4: Enable Remote Control
+By default, the Receiver can only *view* the screen. To grant them actual control, the Host must type these commands in their active terminal session:
+- `allow mouse`
+- `allow keyboard`
+- `stop` (to immediately sever the connection and kick the Receiver out)
+
+---
+
 ## Security
 
 LPU is designed as a legitimate remote support tool. It strictly enforces:
@@ -17,36 +78,3 @@ LPU is designed as a legitimate remote support tool. It strictly enforces:
 2. **Brute-Force Protection:** Sessions drop permanently after 5 failed connection attempts.
 3. **Session Expiration:** Temporary session codes expire unconditionally after 2 hours.
 4. **OS Enforcement:** LPU respects operating system boundaries (e.g. macOS Gatekeeper, Screen Recording, and Accessibility permission dialogs).
-
-## Deployment (Zero-Installation)
-
-The core requirement is that Hosts do not need to download GUI installers or manage configurations.
-
-**Install/Run:**
-```bash
-curl -sL https://raw.githubusercontent.com/yatishydv/lpu/main/install.sh | bash
-lpu lele
-```
-
-## Usage
-
-**Start a Host Session:**
-```bash
-lpu lele
-```
-The terminal will display a temporary session code (e.g. `a1b2c3d4`) and wait.
-
-**Connect to a Host:**
-```bash
-lpu dede <SESSION_CODE>
-```
-Once the Host types `y` to accept, the connection establishes a secure WebRTC peer-to-peer data channel.
-
-**Browser Viewing:**
-The `connect` command securely streams the Host's screen to a local HTTP server (`http://localhost:9090`) and automatically opens the user's default web browser.
-
-**Enable Remote Control (Host-Side):**
-In the active terminal session, the Host types:
-- `allow mouse`
-- `allow keyboard`
-- `stop` (to immediately sever the connection)
