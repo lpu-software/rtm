@@ -8,6 +8,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
 	"image/jpeg"
 	"log"
 	"os"
@@ -97,6 +99,15 @@ func RunHost(serverAddr string) {
 						if err != nil {
 							continue
 						}
+
+						// Capture current mouse coordinates
+						cx, cy := robotgo.GetMousePos()
+						lx := cx - bounds.Min.X
+						ly := cy - bounds.Min.Y
+
+						// Draw cursor onto captured frame
+						drawCursor(img, lx, ly)
+
 						var buf bytes.Buffer
 						jpeg.Encode(&buf, img, &jpeg.Options{Quality: 30})
 						d.Send(buf.Bytes())
@@ -158,6 +169,52 @@ func RunHost(serverAddr string) {
 			fmt.Println("Terminating session...")
 			CleanSessionInfo()
 			os.Exit(0)
+		}
+	}
+}
+
+func drawCursor(img *image.RGBA, cx, cy int) {
+	// A standard 12x19 white cursor arrow with a black outline
+	mask := []string{
+		"B..................",
+		"BB.................",
+		"BWB................",
+		"BWWB...............",
+		"BWWWB..............",
+		"BWWWWB.............",
+		"BWWWWB.............",
+		"BWWWWWB............",
+		"BWWWWWWB...........",
+		"BWWWWWWB...........",
+		"BWWWWWWWB..........",
+		"BWWWWWWWWB.........",
+		"BWWWWWWWWWB........",
+		"BWWWWWWWWWWB.......",
+		"BWWWWWWWWWWWB......",
+		"BWWWWWWWWWWWWB.....",
+		"BWWWWWBBBBBBBB.....",
+		"BWWWWWB............",
+		"BWWWBWWB...........",
+		"BWWB..BWB..........",
+		"BWB....BWB.........",
+		"BB......BB.........",
+	}
+
+	bounds := img.Bounds()
+	for row, line := range mask {
+		for col, char := range line {
+			if char == '.' {
+				continue
+			}
+			px := cx + col
+			py := cy + row
+			if px >= bounds.Min.X && px < bounds.Max.X && py >= bounds.Min.Y && py < bounds.Max.Y {
+				if char == 'B' {
+					img.Set(px, py, color.RGBA{R: 0, G: 0, B: 0, A: 255})
+				} else if char == 'W' {
+					img.Set(px, py, color.RGBA{R: 255, G: 255, B: 255, A: 255})
+				}
+			}
 		}
 	}
 }
