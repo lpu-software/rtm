@@ -49,10 +49,9 @@ func StartAll() {
 	hostCmd.Stderr = hostLog
 	hostCmd.Env = append(os.Environ(), "LPU_DAEMON_CHILD=1")
 	
-	// Hide command window and start in a new process group on Windows
+	// Hide command window and run in a detached state on Windows
 	hostCmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow:    true,
-		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
+		CreationFlags: syscall.CREATE_NO_WINDOW,
 	}
 
 	if err := hostCmd.Start(); err != nil {
