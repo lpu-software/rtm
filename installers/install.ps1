@@ -18,9 +18,11 @@ if (Test-Path $Output) {
         $env:PATH = "$env:PATH;$InstallDir"
     }
 
-    Write-Host "Download complete! Starting Host Session..."
+    Write-Host "Installation complete! You can now run:"
+    Write-Host "  lpu start         (to share your screen in the background)"
+    Write-Host "  lpu lele          (to share your screen in the foreground)"
+    Write-Host "  lpu dede <code>   (to connect to another computer)"
     Write-Host "=============================================="
-    & $Output lele
 } else {
     Write-Host "Error: Failed to download LPU."
 }
