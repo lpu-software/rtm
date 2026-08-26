@@ -49,9 +49,10 @@ func StartAll() {
 	hostCmd.Stderr = hostLog
 	hostCmd.Env = append(os.Environ(), "LPU_DAEMON_CHILD=1")
 	
+	const CREATE_NO_WINDOW = 0x08000000
 	// Hide command window and run in a detached state on Windows
 	hostCmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: syscall.CREATE_NO_WINDOW,
+		CreationFlags: CREATE_NO_WINDOW,
 	}
 
 	if err := hostCmd.Start(); err != nil {

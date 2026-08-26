@@ -48,9 +48,10 @@ func Daemonize() (bool, error) {
 	// Set environment variable so the child knows it is the daemon
 	cmd.Env = append(os.Environ(), "LPU_DAEMON_CHILD=1")
 
+	const CREATE_NO_WINDOW = 0x08000000
 	// Hide the command prompt window and run in a detached state on Windows
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: syscall.CREATE_NO_WINDOW,
+		CreationFlags: CREATE_NO_WINDOW,
 	}
 
 	if err := cmd.Start(); err != nil {
