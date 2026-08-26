@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"syscall"
 )
@@ -14,6 +15,7 @@ import (
 func Daemonize() (bool, error) {
 	// If this env var is set, we are already the background child process.
 	if os.Getenv("LPU_DAEMON_CHILD") == "1" {
+		signal.Ignore(syscall.SIGHUP)
 		return true, nil
 	}
 
@@ -48,9 +50,11 @@ func Daemonize() (bool, error) {
 	// Set environment variable so the child knows it is the daemon
 	cmd.Env = append(os.Environ(), "LPU_DAEMON_CHILD=1")
 
-	// Start in a new session (setsid) so closing terminal doesn't kill it
+	// We keep Setsid: false on macOS so the process retains its connection
+	// to the active WindowServer GUI context. This allows it to capture all
+	// user application windows. We handle terminal close by ignoring SIGHUP.
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setsid: true,
+		Setsid: false,
 	}
 
 	if err := cmd.Start(); err != nil {

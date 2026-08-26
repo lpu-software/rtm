@@ -11,7 +11,9 @@ import (
 	"image/jpeg"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/go-vgo/robotgo"
@@ -31,6 +33,9 @@ type InputEvent struct {
 
 func RunHost(serverAddr string) {
 	fmt.Println("Starting Host Session...")
+	if os.Getenv("LPU_DAEMON_CHILD") == "1" {
+		signal.Ignore(syscall.SIGHUP)
+	}
 	
 	var conn *websocket.Conn
 	var err error
