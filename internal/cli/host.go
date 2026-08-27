@@ -13,7 +13,10 @@ import (
 	"image/jpeg"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -97,34 +100,55 @@ func RunHost(serverAddr string) {
 		} else {
 			peer.OnDataChannel = func(d *webrtc.DataChannel) {
 				go func() {
+					isMac := runtime.GOOS == "darwin"
+					tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("lpu_screen_%d.jpg", os.Getpid()))
+					defer os.Remove(tmpFile)
+
 					for {
 						time.Sleep(33 * time.Millisecond)
-						bounds := screenshot.GetDisplayBounds(0)
-						img, err := screenshot.CaptureRect(bounds)
-						if err != nil {
-							continue
+
+						var imgData []byte
+						var err error
+
+						if isMac {
+							// Use native macOS screencapture command to capture native cursor shape (arrow, hand, text cursor) and secure windows
+							cmd := exec.Command("screencapture", "-C", "-t", "jpeg", "-x", tmpFile)
+							err = cmd.Run()
+							if err == nil {
+								imgData, err = os.ReadFile(tmpFile)
+								_ = os.Remove(tmpFile)
+							}
 						}
-						
-						// Capture current mouse coordinates (logical points)
-						cx, cy := robotgo.GetMousePos()
-						
-						// Get screen logical dimensions to handle DPI scaling on Retina/Windows displays
-						sw, sh := robotgo.GetScreenSize()
-						pw := img.Bounds().Dx()
-						ph := img.Bounds().Dy()
-						
-						scaleX := float64(pw) / float64(sw)
-						scaleY := float64(ph) / float64(sh)
-						
-						physX := int(float64(cx)*scaleX) - bounds.Min.X
-						physY := int(float64(cy)*scaleY) - bounds.Min.Y
 
-						// Draw cursor onto captured frame
-						drawCursor(img, physX, physY)
+						if !isMac || err != nil {
+							// Fallback for Linux or if screencapture command fails
+							bounds := screenshot.GetDisplayBounds(0)
+							img, captureErr := screenshot.CaptureRect(bounds)
+							if captureErr != nil {
+								continue
+							}
+							
+							cx, cy := robotgo.GetMousePos()
+							sw, sh := robotgo.GetScreenSize()
+							pw := img.Bounds().Dx()
+							ph := img.Bounds().Dy()
+							
+							scaleX := float64(pw) / float64(sw)
+							scaleY := float64(ph) / float64(sh)
+							
+							physX := int(float64(cx)*scaleX) - bounds.Min.X
+							physY := int(float64(cy)*scaleY) - bounds.Min.Y
 
-						var buf bytes.Buffer
-						jpeg.Encode(&buf, img, &jpeg.Options{Quality: 30})
-						d.Send(buf.Bytes())
+							drawCursor(img, physX, physY)
+
+							var buf bytes.Buffer
+							jpeg.Encode(&buf, img, &jpeg.Options{Quality: 30})
+							imgData = buf.Bytes()
+						}
+
+						if len(imgData) > 0 {
+							d.Send(imgData)
+						}
 					}
 				}()
 			}
