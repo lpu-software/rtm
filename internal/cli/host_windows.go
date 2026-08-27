@@ -100,13 +100,22 @@ func RunHost(serverAddr string) {
 							continue
 						}
 
-						// Capture current mouse coordinates
+						// Capture current mouse coordinates (logical points)
 						cx, cy := robotgo.GetMousePos()
-						lx := cx - bounds.Min.X
-						ly := cy - bounds.Min.Y
+						
+						// Get screen logical dimensions to handle DPI scaling on Retina/Windows displays
+						sw, sh := robotgo.GetScreenSize()
+						pw := img.Bounds().Dx()
+						ph := img.Bounds().Dy()
+						
+						scaleX := float64(pw) / float64(sw)
+						scaleY := float64(ph) / float64(sh)
+						
+						physX := int(float64(cx)*scaleX) - bounds.Min.X
+						physY := int(float64(cy)*scaleY) - bounds.Min.Y
 
 						// Draw cursor onto captured frame
-						drawCursor(img, lx, ly)
+						drawCursor(img, physX, physY)
 
 						var buf bytes.Buffer
 						jpeg.Encode(&buf, img, &jpeg.Options{Quality: 30})
