@@ -94,6 +94,12 @@ func RunHost(serverAddr string) {
 				go func() {
 					for {
 						time.Sleep(33 * time.Millisecond)
+
+						// Avoid network queue congestion & latency build-up
+						if d.BufferedAmount() > 256*1024 {
+							continue
+						}
+
 						bounds := screenshot.GetDisplayBounds(0)
 						img, err := screenshot.CaptureRect(bounds)
 						if err != nil {
@@ -117,9 +123,20 @@ func RunHost(serverAddr string) {
 						// Draw cursor onto captured frame
 						drawCursor(img, physX, physY)
 
+						var targetImg image.Image = img
+						if pw > 1920 {
+							targetW := 1920
+							targetH := int(float64(ph) * (1920.0 / float64(pw)))
+							targetImg = scaleImage(img, targetW, targetH)
+						}
+
 						var buf bytes.Buffer
-						jpeg.Encode(&buf, img, &jpeg.Options{Quality: 30})
-						d.Send(buf.Bytes())
+						if err := jpeg.Encode(&buf, targetImg, &jpeg.Options{Quality: 45}); err == nil {
+							imgBytes := buf.Bytes()
+							if len(imgBytes) > 0 {
+								_ = d.Send(imgBytes)
+							}
+						}
 					}
 				}()
 			}
@@ -226,4 +243,18 @@ func drawCursor(img *image.RGBA, cx, cy int) {
 			}
 		}
 	}
+}
+
+func scaleImage(src *image.RGBA, targetW, targetH int) *image.RGBA {
+	dst := image.NewRGBA(image.Rect(0, 0, targetW, targetH))
+	srcW := src.Bounds().Dx()
+	srcH := src.Bounds().Dy()
+	for y := 0; y < targetH; y++ {
+		sy := (y * srcH) / targetH
+		for x := 0; x < targetW; x++ {
+			sx := (x * srcW) / targetW
+			dst.SetRGBA(x, y, src.RGBAAt(sx, sy))
+		}
+	}
+	return dst
 }

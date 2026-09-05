@@ -19,7 +19,12 @@ type Peer struct {
 func NewPeer(isHost bool, onSignal func(string), onMessage func(string), onBinary func([]byte)) (*Peer, error) {
 	config := webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
-			{URLs: []string{"stun:stun.l.google.com:19302"}},
+			{URLs: []string{
+				"stun:stun.l.google.com:19302",
+				"stun:stun1.l.google.com:19302",
+				"stun:stun2.l.google.com:19302",
+				"stun:global.stun.twilio.com:3478",
+			}},
 		},
 	}
 

@@ -13,9 +13,7 @@ import (
 	"image/jpeg"
 	"log"
 	"os"
-	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -106,54 +104,46 @@ func RunHost(serverAddr string) {
 		} else {
 			peer.OnDataChannel = func(d *webrtc.DataChannel) {
 				go func() {
-					isMac := runtime.GOOS == "darwin"
-					tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("lpu_screen_%d.jpg", os.Getpid()))
-					defer os.Remove(tmpFile)
-
 					for {
 						time.Sleep(33 * time.Millisecond)
 
-						var imgData []byte
-						var err error
-
-						if isMac {
-							// Use native macOS screencapture command to capture native cursor shape (arrow, hand, text cursor) and secure windows
-							cmd := exec.Command("screencapture", "-C", "-t", "jpeg", "-x", tmpFile)
-							err = cmd.Run()
-							if err == nil {
-								imgData, err = os.ReadFile(tmpFile)
-								_ = os.Remove(tmpFile)
-							}
+						// Avoid network queue congestion & latency build-up
+						if d.BufferedAmount() > 256*1024 {
+							continue
 						}
 
-						if !isMac || err != nil {
-							// Fallback for Linux or if screencapture command fails
-							bounds := screenshot.GetDisplayBounds(0)
-							img, captureErr := screenshot.CaptureRect(bounds)
-							if captureErr != nil {
-								continue
-							}
-							
-							cx, cy := robotgo.GetMousePos()
-							sw, sh := robotgo.GetScreenSize()
-							pw := img.Bounds().Dx()
-							ph := img.Bounds().Dy()
-							
-							scaleX := float64(pw) / float64(sw)
-							scaleY := float64(ph) / float64(sh)
-							
-							physX := int(float64(cx)*scaleX) - bounds.Min.X
-							physY := int(float64(cy)*scaleY) - bounds.Min.Y
-
-							drawCursor(img, physX, physY)
-
-							var buf bytes.Buffer
-							jpeg.Encode(&buf, img, &jpeg.Options{Quality: 30})
-							imgData = buf.Bytes()
+						bounds := screenshot.GetDisplayBounds(0)
+						img, captureErr := screenshot.CaptureRect(bounds)
+						if captureErr != nil {
+							continue
 						}
 
-						if len(imgData) > 0 {
-							d.Send(imgData)
+						cx, cy := robotgo.GetMousePos()
+						sw, sh := robotgo.GetScreenSize()
+						pw := img.Bounds().Dx()
+						ph := img.Bounds().Dy()
+
+						scaleX := float64(pw) / float64(sw)
+						scaleY := float64(ph) / float64(sh)
+
+						physX := int(float64(cx)*scaleX) - bounds.Min.X
+						physY := int(float64(cy)*scaleY) - bounds.Min.Y
+
+						drawCursor(img, physX, physY)
+
+						var targetImg image.Image = img
+						if pw > 1920 {
+							targetW := 1920
+							targetH := int(float64(ph) * (1920.0 / float64(pw)))
+							targetImg = scaleImage(img, targetW, targetH)
+						}
+
+						var buf bytes.Buffer
+						if err := jpeg.Encode(&buf, targetImg, &jpeg.Options{Quality: 45}); err == nil {
+							imgBytes := buf.Bytes()
+							if len(imgBytes) > 0 {
+								_ = d.Send(imgBytes)
+							}
 						}
 					}
 				}()
@@ -262,4 +252,18 @@ func drawCursor(img *image.RGBA, cx, cy int) {
 			}
 		}
 	}
+}
+
+func scaleImage(src *image.RGBA, targetW, targetH int) *image.RGBA {
+	dst := image.NewRGBA(image.Rect(0, 0, targetW, targetH))
+	srcW := src.Bounds().Dx()
+	srcH := src.Bounds().Dy()
+	for y := 0; y < targetH; y++ {
+		sy := (y * srcH) / targetH
+		for x := 0; x < targetW; x++ {
+			sx := (x * srcW) / targetW
+			dst.SetRGBA(x, y, src.RGBAAt(sx, sy))
+		}
+	}
+	return dst
 }
