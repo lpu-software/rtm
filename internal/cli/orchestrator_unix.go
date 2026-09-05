@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -25,6 +26,12 @@ func StartAll() {
 	if err != nil {
 		fmt.Printf("Error getting executable path: %v\n", err)
 		return
+	}
+
+	// Check macOS Screen Recording permission
+	if runtime.GOOS == "darwin" && !CheckScreenRecordingPermission() {
+		fmt.Println("⚠️  Notice: macOS Screen Recording permission is required to stream application windows.")
+		fmt.Println("   If receiver only sees desktop wallpaper, grant permission in: System Settings > Privacy & Security > Screen Recording")
 	}
 
 	// 1. Check if already running

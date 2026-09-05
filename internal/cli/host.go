@@ -41,6 +41,12 @@ func RunHost(serverAddr string) {
 	if os.Getenv("LPU_DAEMON_CHILD") == "1" {
 		signal.Ignore(syscall.SIGHUP)
 	}
+
+	if runtime.GOOS == "darwin" && !CheckScreenRecordingPermission() {
+		fmt.Println("⚠️  WARNING: macOS Screen Recording permission is not granted!")
+		fmt.Println("   Without this, macOS security will hide open application windows and only stream the desktop background.")
+		fmt.Println("   Please grant Screen Recording in: System Settings > Privacy & Security > Screen Recording")
+	}
 	
 	var conn *websocket.Conn
 	var err error
