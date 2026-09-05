@@ -40,81 +40,138 @@ func openBrowser(url string) {
 func startViewerServer(peer *peerpkg.Peer) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte(`
-			<html>
-			<head>
-				<title>RTM Viewer</title>
-				<style>
-					body { background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-					img { max-width: 100%; max-height: 100%; object-fit: contain; }
-				</style>
-			</head>
-			<body>
-				<img id="screen" src="/frame" />
-				<script>
-					setInterval(() => {
-						document.getElementById('screen').src = '/frame?' + new Date().getTime();
-					}, 33); // ~30 fps refresh
+		w.Write([]byte(`<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>LPU Remote Viewer</title>
+	<style>
+		body { background: #090d16; color: #fff; margin: 0; padding: 0; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+		#container { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+		img { max-width: 100vw; max-height: 100vh; object-fit: contain; box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
+	</style>
+</head>
+<body>
+	<div id="container">
+		<img id="screen" src="/frame" alt="Remote Screen" />
+	</div>
+	<script>
+		const screenImg = document.getElementById('screen');
+		const container = document.getElementById('container');
 
-					function sendMouse(type, e) {
-						const img = document.getElementById('screen');
-						if (!img.naturalWidth) return;
-						const rect = img.getBoundingClientRect();
-						const imgRatio = img.naturalWidth / img.naturalHeight;
-						const rectRatio = rect.width / rect.height;
-						
-						let renderWidth = rect.width;
-						let renderHeight = rect.height;
-						let offsetX = 0;
-						let offsetY = 0;
+		setInterval(() => {
+			screenImg.src = '/frame?' + Date.now();
+		}, 25); // ~40 fps refresh
 
-						if (rectRatio > imgRatio) {
-							renderWidth = rect.height * imgRatio;
-							offsetX = (rect.width - renderWidth) / 2;
-						} else {
-							renderHeight = rect.width / imgRatio;
-							offsetY = (rect.height - renderHeight) / 2;
-						}
+		function getNormalizedCoords(e) {
+			if (!screenImg.naturalWidth) return null;
+			const rect = screenImg.getBoundingClientRect();
+			const imgRatio = screenImg.naturalWidth / screenImg.naturalHeight;
+			const rectRatio = rect.width / rect.height;
+			
+			let renderWidth = rect.width;
+			let renderHeight = rect.height;
+			let offsetX = 0;
+			let offsetY = 0;
 
-						let x = e.clientX - rect.left - offsetX;
-						let y = e.clientY - rect.top - offsetY;
+			if (rectRatio > imgRatio) {
+				renderWidth = rect.height * imgRatio;
+				offsetX = (rect.width - renderWidth) / 2;
+			} else {
+				renderHeight = rect.width / imgRatio;
+				offsetY = (rect.height - renderHeight) / 2;
+			}
 
-						// Bound it so it doesn't click outside the actual image
-						if (x < 0 || x > renderWidth || y < 0 || y > renderHeight) return;
+			let x = e.clientX - rect.left - offsetX;
+			let y = e.clientY - rect.top - offsetY;
 
-						// Calculate normalized coordinates (0.0 to 1.0)
-						let normX = x / renderWidth;
-						let normY = y / renderHeight;
+			if (x < 0 || x > renderWidth || y < 0 || y > renderHeight) return null;
 
-						fetch('/input', {
-							method: 'POST',
-							body: JSON.stringify({ type: type, x: normX, y: normY })
-						});
-					}
+			return {
+				x: Math.max(0, Math.min(1, x / renderWidth)),
+				y: Math.max(0, Math.min(1, y / renderHeight))
+			};
+		}
 
-					let lastMove = 0;
-					document.addEventListener('mousemove', (e) => {
-						const now = Date.now();
-						if (now - lastMove > 16) { // ~60fps
-							lastMove = now;
-							sendMouse('mouse_move', e);
-						}
-					});
+		function getButtonName(code) {
+			if (code === 2) return 'right';
+			if (code === 1) return 'middle';
+			return 'left';
+		}
 
-					document.addEventListener('click', (e) => {
-						sendMouse('mouse_click', e);
-					});
+		function sendInput(payload) {
+			fetch('/input', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(payload)
+			}).catch(() => {});
+		}
 
-					document.addEventListener('keydown', (e) => {
-						fetch('/input', {
-							method: 'POST',
-							body: JSON.stringify({ type: 'key_press', key: e.key })
-						});
-					});
-				</script>
-			</body>
-			</html>
-		`))
+		let lastMove = 0;
+		container.addEventListener('mousemove', (e) => {
+			const coords = getNormalizedCoords(e);
+			if (!coords) return;
+			const now = Date.now();
+			if (now - lastMove > 16) {
+				lastMove = now;
+				sendInput({ type: 'mouse_move', x: coords.x, y: coords.y });
+			}
+		});
+
+		container.addEventListener('mousedown', (e) => {
+			const coords = getNormalizedCoords(e);
+			if (!coords) return;
+			sendInput({ type: 'mouse_down', button: getButtonName(e.button), x: coords.x, y: coords.y });
+		});
+
+		container.addEventListener('mouseup', (e) => {
+			const coords = getNormalizedCoords(e);
+			if (!coords) return;
+			sendInput({ type: 'mouse_up', button: getButtonName(e.button), x: coords.x, y: coords.y });
+		});
+
+		container.addEventListener('dblclick', (e) => {
+			const coords = getNormalizedCoords(e);
+			if (!coords) return;
+			sendInput({ type: 'double_click', button: 'left', x: coords.x, y: coords.y });
+		});
+
+		container.addEventListener('contextmenu', (e) => {
+			e.preventDefault();
+			const coords = getNormalizedCoords(e);
+			if (!coords) return;
+			sendInput({ type: 'mouse_click', button: 'right', x: coords.x, y: coords.y });
+		});
+
+		container.addEventListener('wheel', (e) => {
+			e.preventDefault();
+			const coords = getNormalizedCoords(e);
+			sendInput({
+				type: 'mouse_scroll',
+				delta_x: Math.round(e.deltaX),
+				delta_y: Math.round(e.deltaY),
+				x: coords ? coords.x : 0,
+				y: coords ? coords.y : 0
+			});
+		}, { passive: false });
+
+		document.addEventListener('keydown', (e) => {
+			if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Tab", "Backspace"].includes(e.code)) {
+				e.preventDefault();
+			}
+			sendInput({
+				type: 'key_press',
+				key: e.key,
+				code: e.code,
+				alt_key: e.altKey,
+				ctrl_key: e.ctrlKey,
+				shift_key: e.shiftKey,
+				meta_key: e.metaKey
+			});
+		});
+	</script>
+</body>
+</html>`))
 	})
 
 	http.HandleFunc("/frame", func(w http.ResponseWriter, r *http.Request) {

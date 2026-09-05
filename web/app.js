@@ -156,9 +156,8 @@ async function handleSignal(signalStr) {
 }
 
 function setupInputHandlers() {
-    function sendMouse(type, e) {
-        if (dataChannel.readyState !== 'open') return;
-        if (!screenImg.naturalWidth) return;
+    function getNormalizedCoords(e) {
+        if (!screenImg.naturalWidth) return null;
         
         const rect = screenImg.getBoundingClientRect();
         const imgRatio = screenImg.naturalWidth / screenImg.naturalHeight;
@@ -180,38 +179,119 @@ function setupInputHandlers() {
         let x = e.clientX - rect.left - offsetX;
         let y = e.clientY - rect.top - offsetY;
 
-        if (x < 0 || x > renderWidth || y < 0 || y > renderHeight) return;
+        if (x < 0 || x > renderWidth || y < 0 || y > renderHeight) return null;
 
-        let normX = x / renderWidth;
-        let normY = y / renderHeight;
+        return {
+            x: Math.max(0, Math.min(1, x / renderWidth)),
+            y: Math.max(0, Math.min(1, y / renderHeight))
+        };
+    }
 
-        dataChannel.send(JSON.stringify({ type: type, x: normX, y: normY }));
+    function getButtonName(buttonCode) {
+        switch (buttonCode) {
+            case 0: return 'left';
+            case 1: return 'middle';
+            case 2: return 'right';
+            default: return 'left';
+        }
+    }
+
+    function sendEvent(payload) {
+        if (dataChannel && dataChannel.readyState === 'open') {
+            dataChannel.send(JSON.stringify(payload));
+        }
     }
 
     let lastMove = 0;
-    document.addEventListener('mousemove', (e) => {
-        if (viewerContainer.style.display === 'none') return;
+    viewerContainer.addEventListener('mousemove', (e) => {
+        const coords = getNormalizedCoords(e);
+        if (!coords) return;
         const now = Date.now();
-        if (now - lastMove > 16) {
+        if (now - lastMove > 16) { // ~60fps
             lastMove = now;
-            sendMouse('mouse_move', e);
+            sendEvent({
+                type: 'mouse_move',
+                x: coords.x,
+                y: coords.y
+            });
         }
     });
 
-    document.addEventListener('mousedown', (e) => {
-        if (viewerContainer.style.display === 'none') return;
-        sendMouse('mouse_click', e);
+    viewerContainer.addEventListener('mousedown', (e) => {
+        const coords = getNormalizedCoords(e);
+        if (!coords) return;
+        sendEvent({
+            type: 'mouse_down',
+            button: getButtonName(e.button),
+            x: coords.x,
+            y: coords.y
+        });
     });
+
+    viewerContainer.addEventListener('mouseup', (e) => {
+        const coords = getNormalizedCoords(e);
+        if (!coords) return;
+        sendEvent({
+            type: 'mouse_up',
+            button: getButtonName(e.button),
+            x: coords.x,
+            y: coords.y
+        });
+    });
+
+    viewerContainer.addEventListener('dblclick', (e) => {
+        const coords = getNormalizedCoords(e);
+        if (!coords) return;
+        sendEvent({
+            type: 'double_click',
+            button: 'left',
+            x: coords.x,
+            y: coords.y
+        });
+    });
+
+    viewerContainer.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const coords = getNormalizedCoords(e);
+        if (!coords) return;
+        sendEvent({
+            type: 'mouse_click',
+            button: 'right',
+            x: coords.x,
+            y: coords.y
+        });
+    });
+
+    viewerContainer.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const coords = getNormalizedCoords(e);
+        sendEvent({
+            type: 'mouse_scroll',
+            delta_x: Math.round(e.deltaX),
+            delta_y: Math.round(e.deltaY),
+            x: coords ? coords.x : 0,
+            y: coords ? coords.y : 0
+        });
+    }, { passive: false });
 
     document.addEventListener('keydown', (e) => {
         if (viewerContainer.style.display === 'none') return;
-        if (dataChannel.readyState !== 'open') return;
+        if (!dataChannel || dataChannel.readyState !== 'open') return;
         
-        // Prevent default browser actions for common keys to avoid scrolling/refreshing
-        if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Enter"].includes(e.code)) {
+        // Prevent default browser shortcuts when focused on remote viewer
+        if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Tab", "Backspace"].includes(e.code)) {
             e.preventDefault();
         }
 
-        dataChannel.send(JSON.stringify({ type: 'key_press', key: e.key }));
+        sendEvent({
+            type: 'key_press',
+            key: e.key,
+            code: e.code,
+            alt_key: e.altKey,
+            ctrl_key: e.ctrlKey,
+            shift_key: e.shiftKey,
+            meta_key: e.metaKey
+        });
     });
 }
+
