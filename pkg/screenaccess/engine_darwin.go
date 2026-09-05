@@ -56,7 +56,6 @@ static void DarwinStoreSCKFrame(const void* src, int width, int height, int byte
         s_frameStore.bufferSize = requiredSize;
     }
     if (s_frameStore.buffer && src) {
-        // Fast memcpy of complete GPU frame
         memcpy(s_frameStore.buffer, src, requiredSize);
         s_frameStore.width = width;
         s_frameStore.height = height;
@@ -85,6 +84,101 @@ static void* DarwinGetLatestSCKFrame(int* outW, int* outH, int* outBytesPerRow, 
     }
     pthread_mutex_unlock(&s_frameStore.mutex);
     return copyBuf;
+}
+
+// Composite real dynamic system mouse cursor (with exact shape, hotspot, and position)
+static void DarwinCompositeRealCursor(uint8_t* rgbaPixels, int width, int height) {
+    if (!rgbaPixels || width <= 0 || height <= 0) return;
+
+    @autoreleasepool {
+        NSPoint mouseLoc = [NSEvent mouseLocation];
+        NSScreen* mainScreen = [NSScreen mainScreen];
+        if (!mainScreen) return;
+        NSRect screenFrame = [mainScreen frame];
+        if (screenFrame.size.width <= 0 || screenFrame.size.height <= 0) return;
+
+        NSCursor* cur = [NSCursor currentSystemCursor];
+        if (!cur) cur = [NSCursor currentCursor];
+        if (!cur) return;
+
+        NSImage* img = [cur image];
+        NSPoint hotSpot = [cur hotSpot];
+        if (!img) return;
+
+        NSSize imgSize = [img size];
+        if (imgSize.width <= 0 || imgSize.height <= 0) return;
+
+        CGFloat scaleX = (CGFloat)width / screenFrame.size.width;
+        CGFloat scaleY = (CGFloat)height / screenFrame.size.height;
+
+        int curPixelX = (int)((mouseLoc.x - hotSpot.x) * scaleX);
+        int curPixelY = (int)(((screenFrame.size.height - mouseLoc.y) - (imgSize.height - hotSpot.y)) * scaleY);
+        int curW = (int)(imgSize.width * scaleX);
+        int curH = (int)(imgSize.height * scaleY);
+
+        if (curW <= 0 || curH <= 0) return;
+
+        CGImageRef cgImg = [img CGImageForProposedRect:NULL context:NULL hints:NULL];
+        if (!cgImg) return;
+
+        size_t cursorBytesPerRow = curW * 4;
+        void* cursorBuf = malloc(curH * cursorBytesPerRow);
+        if (!cursorBuf) return;
+
+        CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+        CGContextRef ctx = CGBitmapContextCreate(
+            cursorBuf, curW, curH, 8, cursorBytesPerRow, cs,
+            kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big
+        );
+        CGColorSpaceRelease(cs);
+
+        if (ctx) {
+            CGContextClearRect(ctx, CGRectMake(0, 0, curW, curH));
+            CGContextDrawImage(ctx, CGRectMake(0, 0, curW, curH), cgImg);
+            CGContextRelease(ctx);
+
+            uint8_t* cPtr = (uint8_t*)cursorBuf;
+            for (int cy = 0; cy < curH; cy++) {
+                int py = curPixelY + cy;
+                if (py < 0 || py >= height) continue;
+
+                uint8_t* dstRow = rgbaPixels + (py * width * 4);
+                uint8_t* srcRow = cPtr + (cy * curW * 4);
+
+                for (int cx = 0; cx < curW; cx++) {
+                    int px = curPixelX + cx;
+                    if (px < 0 || px >= width) continue;
+
+                    uint8_t srcR = srcRow[cx * 4 + 0];
+                    uint8_t srcG = srcRow[cx * 4 + 1];
+                    uint8_t srcB = srcRow[cx * 4 + 2];
+                    uint8_t srcA = srcRow[cx * 4 + 3];
+
+                    if (srcA == 0) continue;
+
+                    if (srcA == 255) {
+                        dstRow[px * 4 + 0] = srcR;
+                        dstRow[px * 4 + 1] = srcG;
+                        dstRow[px * 4 + 2] = srcB;
+                        dstRow[px * 4 + 3] = 255;
+                    } else {
+                        uint8_t dstR = dstRow[px * 4 + 0];
+                        uint8_t dstG = dstRow[px * 4 + 1];
+                        uint8_t dstB = dstRow[px * 4 + 2];
+
+                        float a = (float)srcA / 255.0f;
+                        float invA = 1.0f - a;
+
+                        dstRow[px * 4 + 0] = (uint8_t)(srcR * a + dstR * invA);
+                        dstRow[px * 4 + 1] = (uint8_t)(srcG * a + dstG * invA);
+                        dstRow[px * 4 + 2] = (uint8_t)(srcB * a + dstB * invA);
+                        dstRow[px * 4 + 3] = 255;
+                    }
+                }
+            }
+        }
+        free(cursorBuf);
+    }
 }
 
 // ScreenCaptureKit Stream Output Delegate
@@ -130,7 +224,7 @@ static int DarwinStartPersistentSCKStream(uint32_t displayID) {
     }
 
     if (s_activeStream) {
-        return 0; // Already running
+        return 0;
     }
 
     dispatch_semaphore_t sema = dispatch_semaphore_create(0);
@@ -151,14 +245,13 @@ static int DarwinStartPersistentSCKStream(uint32_t displayID) {
             }
         }
 
-        // CRITICAL: Exclude nothing — capture the full composited desktop display with ALL foreground windows
         SCContentFilter* filter = [[SCContentFilter alloc] initWithDisplay:targetDisplay excludingWindows:@[]];
         SCStreamConfiguration* config = [[SCStreamConfiguration alloc] init];
         config.width = (size_t)targetDisplay.width;
         config.height = (size_t)targetDisplay.height;
-        config.showsCursor = YES; // Embeds real dynamic system hardware cursor (arrow, I-beam, hand, resize)
+        config.showsCursor = YES;
         config.pixelFormat = kCVPixelFormatType_32BGRA;
-        config.minimumFrameInterval = CMTimeMake(1, 60); // 60 FPS smooth capture
+        config.minimumFrameInterval = CMTimeMake(1, 60);
         config.queueDepth = 5;
 
         s_streamOutput = [[DarwinSCStreamOutput alloc] init];
@@ -202,40 +295,8 @@ static void DarwinStopPersistentSCKStream() {
     }
 }
 
-// Convert CGImage to raw RGBA buffer (Fallback)
-static void* DarwinCGImageToRGBA(CGImageRef imageRef, int* outW, int* outH) {
-    if (!imageRef) return NULL;
-    size_t width = CGImageGetWidth(imageRef);
-    size_t height = CGImageGetHeight(imageRef);
-    *outW = (int)width;
-    *outH = (int)height;
-
-    size_t bytesPerRow = width * 4;
-    void* buffer = malloc(height * bytesPerRow);
-    if (!buffer) return NULL;
-
-    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
-    CGContextRef ctx = CGBitmapContextCreate(
-        buffer, width, height, 8, bytesPerRow, cs,
-        kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big
-    );
-    CGColorSpaceRelease(cs);
-
-    if (!ctx) {
-        free(buffer);
-        return NULL;
-    }
-
-    CGRect rect = CGRectMake(0, 0, width, height);
-    CGContextClearRect(ctx, rect);
-    CGContextDrawImage(ctx, rect, imageRef);
-    CGContextRelease(ctx);
-
-    return buffer;
-}
-
-// Fallback CoreGraphics Display Capture + Real System Cursor Overlay
-static void* DarwinCaptureCGDisplayWithCursor(uint32_t displayID, int* outW, int* outH, int* outErr) {
+// Fallback CoreGraphics Display Capture
+static void* DarwinCaptureCGDisplay(uint32_t displayID, int* outW, int* outH, int* outErr) {
     *outErr = 0;
     DarwinInitAccess();
 
@@ -256,7 +317,6 @@ static void* DarwinCaptureCGDisplayWithCursor(uint32_t displayID, int* outW, int
     }
 
     if (!dispImage && fnCGWindowListCreateImage) {
-        // Fallback to WindowList with ALL options
         CGRect bounds = CGDisplayBounds(targetID);
         dispImage = fnCGWindowListCreateImage(bounds, 0, 0, 0);
     }
@@ -291,47 +351,12 @@ static void* DarwinCaptureCGDisplayWithCursor(uint32_t displayID, int* outW, int
         return NULL;
     }
 
-    // Draw display
     CGRect rect = CGRectMake(0, 0, width, height);
     CGContextClearRect(ctx, rect);
     CGContextDrawImage(ctx, rect, dispImage);
     CGImageRelease(dispImage);
-
-    // Composite Real System Cursor (arrow, I-beam, pointing hand, resize cursor, etc.)
-    NSPoint mouseLoc = [NSEvent mouseLocation];
-    NSScreen* mainScreen = [NSScreen mainScreen];
-    if (mainScreen) {
-        NSRect screenFrame = [mainScreen frame];
-        NSCursor* currentCursor = [NSCursor currentSystemCursor];
-        if (!currentCursor) {
-            currentCursor = [NSCursor currentCursor];
-        }
-
-        if (currentCursor) {
-            NSImage* cursorImg = [currentCursor image];
-            NSPoint hotspot = [currentCursor hotSpot];
-            if (cursorImg) {
-                CGFloat scaleX = (CGFloat)width / screenFrame.size.width;
-                CGFloat scaleY = (CGFloat)height / screenFrame.size.height;
-
-                CGFloat curX = (mouseLoc.x - hotspot.x) * scaleX;
-                CGFloat curY = ((screenFrame.size.height - mouseLoc.y) - (cursorImg.size.height - hotspot.y)) * scaleY;
-
-                CGImageRef cursorCG = [cursorImg CGImageForProposedRect:NULL context:NULL hints:NULL];
-                if (cursorCG) {
-                    CGRect cursorRect = CGRectMake(
-                        curX,
-                        (CGFloat)height - curY - (cursorImg.size.height * scaleY),
-                        cursorImg.size.width * scaleX,
-                        cursorImg.size.height * scaleY
-                    );
-                    CGContextDrawImage(ctx, cursorRect, cursorCG);
-                }
-            }
-        }
-    }
-
     CGContextRelease(ctx);
+
     return buffer;
 }
 
@@ -428,7 +453,7 @@ type DarwinScreenEngine struct {
 // NewDarwinScreenEngine initializes the macOS display capture and input engine.
 func NewDarwinScreenEngine() (*DarwinScreenEngine, error) {
 	engine := &DarwinScreenEngine{
-		frameQuality: 45,
+		frameQuality: 50,
 	}
 	engine.refreshDisplays()
 
@@ -437,7 +462,7 @@ func NewDarwinScreenEngine() (*DarwinScreenEngine, error) {
 	if res == 0 {
 		engine.streamActive = true
 	} else {
-		fmt.Printf("[LPU] Warning: SCStream returned code %d, using fallback capture.\n", res)
+		fmt.Printf("[LPU] Notice: SCStream returned code %d, using fallback CoreGraphics engine.\n", res)
 	}
 
 	return engine, nil
@@ -480,6 +505,8 @@ func (e *DarwinScreenEngine) CaptureDisplay(displayIndex int) (*FrameData, error
 		if buf != nil {
 			rawRGBA := bgraBufferToRGBA(buf, int(outW), int(outH), int(outStride))
 			if rawRGBA != nil {
+				// Composite the real system cursor onto the frame
+				C.DarwinCompositeRealCursor((*C.uint8_t)(unsafe.Pointer(&rawRGBA.Pix[0])), C.int(rawRGBA.Rect.Dx()), C.int(rawRGBA.Rect.Dy()))
 				return e.encodeRGBA(rawRGBA, displayIndex, start)
 			}
 		}
@@ -487,10 +514,12 @@ func (e *DarwinScreenEngine) CaptureDisplay(displayIndex int) (*FrameData, error
 
 	// 2. Fallback to CoreGraphics Display Capture + Real Cursor overlay
 	var outW, outH, outErr C.int
-	buf := C.DarwinCaptureCGDisplayWithCursor(C.uint32_t(0), &outW, &outH, &outErr)
+	buf := C.DarwinCaptureCGDisplay(C.uint32_t(0), &outW, &outH, &outErr)
 	if buf != nil && outErr == 0 {
 		rawRGBA := cBufferToRGBA(buf, int(outW), int(outH))
 		if rawRGBA != nil {
+			// Composite the real system cursor onto the frame
+			C.DarwinCompositeRealCursor((*C.uint8_t)(unsafe.Pointer(&rawRGBA.Pix[0])), C.int(rawRGBA.Rect.Dx()), C.int(rawRGBA.Rect.Dy()))
 			return e.encodeRGBA(rawRGBA, displayIndex, start)
 		}
 	}
@@ -500,6 +529,9 @@ func (e *DarwinScreenEngine) CaptureDisplay(displayIndex int) (*FrameData, error
 	img, err := screenshot.CaptureRect(bounds)
 	if err != nil {
 		return nil, fmt.Errorf("display capture failed: %w", err)
+	}
+	if len(img.Pix) > 0 {
+		C.DarwinCompositeRealCursor((*C.uint8_t)(unsafe.Pointer(&img.Pix[0])), C.int(img.Rect.Dx()), C.int(img.Rect.Dy()))
 	}
 	return e.encodeRGBA(img, displayIndex, start)
 }

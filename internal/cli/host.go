@@ -28,11 +28,12 @@ func RunHost(serverAddr string) {
 		signal.Ignore(syscall.SIGHUP)
 	}
 
-	if runtime.GOOS == "darwin" && !CheckScreenRecordingPermission() {
+	if runtime.GOOS == "darwin" && !PromptScreenRecordingPermission() {
 		fmt.Println("⚠️  WARNING: macOS Screen Recording permission is not granted!")
 		fmt.Println("   Without this, macOS security will hide open application windows and only stream the desktop background.")
 		fmt.Println("   Please grant Screen Recording in: System Settings > Privacy & Security > Screen Recording")
 	}
+
 
 	// Initialize the complete screen access engine (captures composited display with real hardware cursor)
 	engine, err := screenaccess.NewEngine()

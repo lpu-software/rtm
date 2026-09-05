@@ -3,7 +3,8 @@ const viewerContainer = document.getElementById('viewer-container');
 const sessionInput = document.getElementById('session-code');
 const connectBtn = document.getElementById('connect-btn');
 const statusMsg = document.getElementById('status-message');
-const screenImg = document.getElementById('screen');
+const canvas = document.getElementById('screen-canvas');
+const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
 
 let ws;
 let pc;
@@ -28,7 +29,6 @@ function connect() {
     setStatus('Connecting to signaling server...');
     connectBtn.disabled = true;
 
-    // Use current host for websocket
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${wsProto}//${window.location.host}/ws`;
     
@@ -108,7 +108,6 @@ async function setupWebRTC() {
         }
     };
 
-    // We are the viewer (remote), so we create the data channel
     dataChannel = pc.createDataChannel('control');
     dataChannel.binaryType = 'blob';
 
@@ -117,16 +116,47 @@ async function setupWebRTC() {
         dataChannel.send('Hello from Browser!');
     };
 
-    let activeUrl = null;
+    // High-performance hardware-accelerated frame rendering pipeline
+    let pendingBlob = null;
+    let isRendering = false;
+
     dataChannel.onmessage = (event) => {
         if (event.data instanceof Blob) {
-            if (activeUrl) {
-                URL.revokeObjectURL(activeUrl);
+            pendingBlob = event.data;
+            if (!isRendering) {
+                isRendering = true;
+                requestAnimationFrame(renderFrame);
             }
-            activeUrl = URL.createObjectURL(event.data);
-            screenImg.src = activeUrl;
         }
     };
+
+    async function renderFrame() {
+        if (!pendingBlob) {
+            isRendering = false;
+            return;
+        }
+
+        const blob = pendingBlob;
+        pendingBlob = null;
+
+        try {
+            const bitmap = await createImageBitmap(blob);
+            if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+                canvas.width = bitmap.width;
+                canvas.height = bitmap.height;
+            }
+            ctx.drawImage(bitmap, 0, 0);
+            bitmap.close();
+        } catch (err) {
+            console.error('Frame decode error:', err);
+        }
+
+        if (pendingBlob) {
+            requestAnimationFrame(renderFrame);
+        } else {
+            isRendering = false;
+        }
+    }
 
     try {
         const offer = await pc.createOffer();
@@ -157,10 +187,10 @@ async function handleSignal(signalStr) {
 
 function setupInputHandlers() {
     function getNormalizedCoords(e) {
-        if (!screenImg.naturalWidth) return null;
+        if (!canvas.width || !canvas.height) return null;
         
-        const rect = screenImg.getBoundingClientRect();
-        const imgRatio = screenImg.naturalWidth / screenImg.naturalHeight;
+        const rect = canvas.getBoundingClientRect();
+        const imgRatio = canvas.width / canvas.height;
         const rectRatio = rect.width / rect.height;
         
         let renderWidth = rect.width;
@@ -278,7 +308,6 @@ function setupInputHandlers() {
         if (viewerContainer.style.display === 'none') return;
         if (!dataChannel || dataChannel.readyState !== 'open') return;
         
-        // Prevent default browser shortcuts when focused on remote viewer
         if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Tab", "Backspace"].includes(e.code)) {
             e.preventDefault();
         }
@@ -294,4 +323,3 @@ function setupInputHandlers() {
         });
     });
 }
-

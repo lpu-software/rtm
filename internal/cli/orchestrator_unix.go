@@ -28,11 +28,12 @@ func StartAll() {
 		return
 	}
 
-	// Check macOS Screen Recording permission
-	if runtime.GOOS == "darwin" && !CheckScreenRecordingPermission() {
-		fmt.Println("⚠️  Notice: macOS Screen Recording permission is required to stream application windows.")
-		fmt.Println("   If receiver only sees desktop wallpaper, grant permission in: System Settings > Privacy & Security > Screen Recording")
+	// Check and prompt macOS Screen Recording permission
+	if runtime.GOOS == "darwin" && !PromptScreenRecordingPermission() {
+		fmt.Println("⚠️  Notice: macOS Screen Recording permission is required to capture application windows.")
+		fmt.Println("   System Settings has been opened. Please enable 'Screen Recording' for LPU or Terminal.")
 	}
+
 
 	// 1. Check if already running
 	hostPID, _ := getPID(lpuDir, "session.pid")

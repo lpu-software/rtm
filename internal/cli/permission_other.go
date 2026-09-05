@@ -2,7 +2,10 @@
 
 package cli
 
-// CheckScreenRecordingPermission returns true on non-macOS systems.
 func CheckScreenRecordingPermission() bool {
+	return true
+}
+
+func PromptScreenRecordingPermission() bool {
 	return true
 }

@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RTM Web Viewer</title>
+    <title>LPU Remote Access</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="login-container">
         <div class="card">
-            <h2>RTM Remote Access</h2>
+            <h2>LPU Remote Access</h2>
             <p>Enter the session code provided by the host.</p>
             <div class="input-group">
                 <input type="text" id="session-code" placeholder="e.g. 78c6e31a" autocomplete="off" spellcheck="false" />
@@ -20,7 +20,7 @@
     </div>
 
     <div id="viewer-container" style="display: none;">
-        <img id="screen" draggable="false" />
+        <canvas id="screen-canvas"></canvas>
     </div>
 
     <script src="app.js"></script>
