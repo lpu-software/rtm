@@ -245,8 +245,8 @@ static int DarwinStartPersistentSCKStream(uint32_t displayID) {
             }
         }
 
-        // CRITICAL: Include all applications explicitly to capture all surfaces, including NSWindowSharingNone and kiosk windows
-        SCContentFilter* filter = [[SCContentFilter alloc] initWithDisplay:targetDisplay includingApplications:content.applications exceptingWindows:@[]];
+        // Capture the full composited desktop display (including desktop folders, wallpaper, dock, menubar, and all windows)
+        SCContentFilter* filter = [[SCContentFilter alloc] initWithDisplay:targetDisplay excludingWindows:@[]];
         SCStreamConfiguration* config = [[SCStreamConfiguration alloc] init];
         config.width = (size_t)targetDisplay.width;
         config.height = (size_t)targetDisplay.height;
@@ -506,8 +506,7 @@ func (e *DarwinScreenEngine) CaptureDisplay(displayIndex int) (*FrameData, error
 		if buf != nil {
 			rawRGBA := bgraBufferToRGBA(buf, int(outW), int(outH), int(outStride))
 			if rawRGBA != nil {
-				// Composite the real system cursor onto the frame
-				C.DarwinCompositeRealCursor((*C.uint8_t)(unsafe.Pointer(&rawRGBA.Pix[0])), C.int(rawRGBA.Rect.Dx()), C.int(rawRGBA.Rect.Dy()))
+				// SCStream with config.showsCursor = YES already composites the real hardware cursor perfectly
 				return e.encodeRGBA(rawRGBA, displayIndex, start)
 			}
 		}

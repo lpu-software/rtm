@@ -106,6 +106,7 @@ button:disabled {
     width: 100vw;
     background: #000;
     overflow: hidden;
+    cursor: none !important;
 }
 
 #screen-canvas {
@@ -115,4 +116,3 @@ button:disabled {
     display: block;
     cursor: none !important;
 }
-

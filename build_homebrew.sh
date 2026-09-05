@@ -29,9 +29,9 @@ cat > lpu.rb <<EOF
 class Lpu < Formula
   desc "LPU - Remote Terminal Management"
   homepage "https://github.com/lpu-software/rtm"
-  url "https://github.com/lpu-software/rtm/releases/download/v1.0.27/lpu-mac.tar.gz"
+  url "https://github.com/lpu-software/rtm/releases/download/v1.0.29/lpu-mac.tar.gz"
   sha256 "${SHA}"
-  version "1.0.27"
+  version "1.0.29"
 
   def install
     # Install the binary
