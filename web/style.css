@@ -113,5 +113,6 @@ button:disabled {
     max-height: 100vh;
     object-fit: contain;
     display: block;
-    cursor: default;
+    cursor: none !important;
 }
+

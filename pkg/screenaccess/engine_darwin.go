@@ -245,7 +245,8 @@ static int DarwinStartPersistentSCKStream(uint32_t displayID) {
             }
         }
 
-        SCContentFilter* filter = [[SCContentFilter alloc] initWithDisplay:targetDisplay excludingWindows:@[]];
+        // CRITICAL: Include all applications explicitly to capture all surfaces, including NSWindowSharingNone and kiosk windows
+        SCContentFilter* filter = [[SCContentFilter alloc] initWithDisplay:targetDisplay includingApplications:content.applications exceptingWindows:@[]];
         SCStreamConfiguration* config = [[SCStreamConfiguration alloc] init];
         config.width = (size_t)targetDisplay.width;
         config.height = (size_t)targetDisplay.height;
