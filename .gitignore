@@ -1,0 +1,16 @@
+# Binaries
+bin/
+lpu
+*.exe
+*.dll
+*.dylib
+*.so
+
+# Test Output Directories
+sectest_results/
+lpu_sectest_results/
+sectest_output/
+
+# OS specific
+.DS_Store
+Thumbs.db

@@ -3,12 +3,15 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/yatishydv/rtm/internal/cli"
 	"github.com/yatishydv/rtm/internal/signaling"
+	"github.com/yatishydv/rtm/pkg/sectest/reporter"
+	"github.com/yatishydv/rtm/pkg/sectest/runner"
 	"github.com/yatishydv/rtm/web"
 )
 
@@ -88,6 +91,33 @@ func main() {
 	case "start":
 		cli.StartAll()
 
+	case "test-capture", "sectest":
+		sectestCmd := flag.NewFlagSet("test-capture", flag.ExitOnError)
+		outDir := sectestCmd.String("output-dir", "./sectest_output", "Directory to export reports (JSON, HTML, MD)")
+		trials := sectestCmd.Int("trials", 3, "Number of trials per test case")
+		sectestCmd.Parse(os.Args[2:])
+
+		harness := runner.NewTestHarness(runner.HarnessConfig{
+			TrialsCount:        *trials,
+			IncludeSimulations: true,
+			OutputDir:          *outDir,
+			Headless:           true,
+		})
+		testRun, err := harness.RunSuite()
+		if err != nil {
+			log.Fatalf("Test run failed: %v", err)
+		}
+		jsonPath := filepath.Join(*outDir, "results.json")
+		mdPath := filepath.Join(*outDir, "SECURITY_REPORT.md")
+		htmlPath := filepath.Join(*outDir, "security_eval_report.html")
+		_ = reporter.ExportJSON(testRun, jsonPath)
+		_ = reporter.ExportMarkdown(testRun, mdPath)
+		_ = reporter.ExportHTML(testRun, htmlPath)
+		fmt.Printf("✅ Security validation suite executed successfully.\n")
+		fmt.Printf("   • JSON Results: %s\n", jsonPath)
+		fmt.Printf("   • Markdown Report: %s\n", mdPath)
+		fmt.Printf("   • Interactive HTML: %s\n", htmlPath)
+
 	default:
 		printUsage()
 		os.Exit(1)
@@ -103,5 +133,6 @@ func printUsage() {
 	fmt.Println("  lpu serve                   Start the signaling server and web viewer")
 	fmt.Println("  lpu status                  Check active background session status")
 	fmt.Println("  lpu stop                    Stop the active background session")
+	fmt.Println("  lpu test-capture            Run screen capture security validation & compatibility evaluation")
 	fmt.Println("  lpu kya                     Check for and install updates")
 }
